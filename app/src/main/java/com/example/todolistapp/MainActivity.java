@@ -4,9 +4,15 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import android.annotation.SuppressLint;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,6 +26,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
@@ -36,6 +43,23 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        DatabaseHelper dbHelper = new DatabaseHelper(this);
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+
+        todoItemList = new ArrayList<>();
+
+
+        Cursor cursor = db.query(DatabaseHelper.TABLE_TODO, null, null, null, null, null, null);
+        printCursor(cursor);
+
+        while (cursor.moveToNext()){
+            String taskText = cursor.getString(cursor.getColumnIndex(DatabaseHelper.COLUMN_TASK_TEXT));
+            int isUrgent = cursor.getInt(cursor.getColumnIndex(DatabaseHelper.COLUMN_IS_URGENT));
+            todoItemList.add(new TodoItem(taskText, isUrgent == 1));
+        }
+
+
 
         editTextTodo = findViewById(R.id.editText);
         buttonAdd = findViewById(R.id.buttonAdd);
@@ -66,6 +90,11 @@ public class MainActivity extends AppCompatActivity {
                     todoItemList.add(newTodoItem);
                     editTextTodo.setText("");
                     todoAdapter.notifyDataSetChanged();
+
+                    ContentValues values = new ContentValues();
+                    values.put(DatabaseHelper.COLUMN_TASK_TEXT, todoText);
+                    values.put(DatabaseHelper.COLUMN_IS_URGENT, switchValue ? 1 : 0);
+                    db.insert("todos", null, values);
                 }
             }
         });
@@ -81,6 +110,18 @@ public class MainActivity extends AppCompatActivity {
                             public void onClick(DialogInterface dialog, int which) {
                                 todoItemList.remove(position);
                                 todoAdapter.notifyDataSetChanged();
+
+                                DatabaseHelper dbHelper = new DatabaseHelper(MainActivity.this);
+                                SQLiteDatabase db = dbHelper.getWritableDatabase();
+
+                                // Define the selection criteria and arguments
+                                String selection = DatabaseHelper.COLUMN_ID + "=?";
+                                String[] selectionArgs = {String.valueOf(id)};
+
+                                // Delete the row from the database
+                                db.delete(DatabaseHelper.TABLE_TODO, selection, selectionArgs);
+
+                                db.close();
                             }
                         })
                         .setNegativeButton("No", new DialogInterface.OnClickListener() {
@@ -96,9 +137,28 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
-
-
     }
+
+    private void printCursor(Cursor cursor) {
+        int columnCount = cursor.getColumnCount();
+        String[] columnNames = cursor.getColumnNames();
+        int resultCount = cursor.getCount();
+
+        Log.d("Debug", "Number of columns: " + columnCount);
+        Log.d("Debug", "Column names: " + Arrays.toString(columnNames));
+        Log.d("Debug", "Number of results: " + resultCount);
+
+        cursor.moveToFirst();
+        while (!cursor.isAfterLast()) {
+            StringBuilder rowInfo = new StringBuilder("Row: ");
+            for (int i = 0; i < columnCount; i++) {
+                rowInfo.append(columnNames[i]).append("=").append(cursor.getString(i)).append(", ");
+            }
+            Log.d("CursorDebug", rowInfo.toString());
+            cursor.moveToNext();
+        }
+    }
+
 
     public class TodoItem {
         private String taskText;
@@ -157,6 +217,40 @@ public class MainActivity extends AppCompatActivity {
             }
 
             return convertView;
+        }
+    }
+
+    public class DatabaseHelper extends SQLiteOpenHelper{
+
+        private static final String DATABASE_NAME = "todo.db";
+        private static final int DATABASE_VERSION = 1;
+
+        // Table name and columns
+        public static final String TABLE_TODO = "todos";
+        public static final String COLUMN_ID = "_id";
+        public static final String COLUMN_TASK_TEXT = "task_text";
+        public static final String COLUMN_IS_URGENT = "is_urgent";
+
+        private static final String DATABASE_CREATE = "CREATE TABLE " + TABLE_TODO + " (" +
+                COLUMN_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                COLUMN_TASK_TEXT + " TEXT NOT NULL, " +
+                COLUMN_IS_URGENT + " INTEGER DEFAULT 0);";
+
+        public DatabaseHelper(Context context) {
+            super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        }
+
+        @Override
+        public void onCreate(SQLiteDatabase db) {
+            db.execSQL(DATABASE_CREATE);
+
+        }
+
+        @Override
+        public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+            db.execSQL("DROP TABLE IF EXISTS " + TABLE_TODO);
+            onCreate(db);
+
         }
     }
 }
