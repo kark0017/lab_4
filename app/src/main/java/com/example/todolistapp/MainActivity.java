@@ -154,6 +154,8 @@ public class MainActivity extends AppCompatActivity {
 
             if(todoItem.isUrgent()){
                 todoTextView.setBackgroundColor(ContextCompat.getColor(parent.getContext(), R.color.red));
+            }else{
+                todoTextView.setBackgroundColor(ContextCompat.getColor(parent.getContext(), R.color.white));
             }
 
             return convertView;
